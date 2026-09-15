@@ -25,12 +25,19 @@ const applyForJob = async (req, res) => {
         // Check job
         const job = await Job.findById(jobId);
 
-        if (!job) {
-            return res.status(404).json({
-                success: false,
-                message: "Job not found"
-            });
-        }
+if (!job) {
+  return res.status(404).json({
+    success: false,
+    message: "Job not found",
+  });
+}
+
+if (job.status !== "Active") {
+  return res.status(400).json({
+    success: false,
+    message: "This job is no longer accepting applications",
+  });
+}
 
         // Check duplicate application
         const existingApplication =
@@ -201,12 +208,19 @@ const getJobApplicants = async (req, res) => {
         // Find job
         const job = await Job.findById(jobId);
 
-        if (!job) {
-            return res.status(404).json({
-                success: false,
-                message: "Job not found"
-            });
-        }
+if (!job) {
+  return res.status(404).json({
+    success: false,
+    message: "Job not found",
+  });
+}
+
+if (job.status !== "Active") {
+  return res.status(400).json({
+    success: false,
+    message: "This job is no longer accepting applications",
+  });
+}
 
         // Only job owner can see applicants
         if (
