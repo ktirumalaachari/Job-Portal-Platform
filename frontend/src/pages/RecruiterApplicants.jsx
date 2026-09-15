@@ -1,367 +1,316 @@
-
 import { useEffect, useState } from "react";
-import { useSearchParams, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import api from "../services/api";
+import { useAuth } from "../context/useAuth";
 
-const RecruiterApplicants = () => {
-  const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
+const RecruiterDashboard = () => {
+  const { user, logout } = useAuth();
 
-  const [applicants, setApplicants] = useState([]);
   const [jobs, setJobs] = useState([]);
+  const [selectedJob, setSelectedJob] = useState(null);
+  const [applications, setApplications] = useState([]);
 
-  const [search, setSearch] = useState(
-    searchParams.get("search") || ""
-  );
+  const [loadingJobs, setLoadingJobs] = useState(true);
+  const [loadingApplicants, setLoadingApplicants] = useState(false);
 
-  const [status, setStatus] = useState(
-    searchParams.get("status") || ""
-  );
-
-  const [jobId, setJobId] = useState(
-    searchParams.get("jobId") || ""
-  );
-
-  const [page, setPage] = useState(
-    Number(searchParams.get("page")) || 1
-  );
-
-  const [totalPages, setTotalPages] = useState(1);
-  const [totalApplicants, setTotalApplicants] = useState(0);
-
-  const [loading, setLoading] = useState(true);
-  const [jobsLoading, setJobsLoading] = useState(true);
+  const [deletingJob, setDeletingJob] = useState(null);
+  const [updatingApplication, setUpdatingApplication] = useState(null);
+  const [updatingJobStatus, setUpdatingJobStatus] = useState(null);
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  const [updatingId, setUpdatingId] = useState(null);
-
-  const limit = 10;
-
-  const backendUrl = "http://localhost:8001";
-
-  // ========================================
-  // FETCH RECRUITER JOBS
-  // ========================================
-
+  // ================================
+  // Fetch Recruiter's Jobs
+  // ================================
   const fetchJobs = async () => {
     try {
-      setJobsLoading(true);
+      setLoadingJobs(true);
+      setError("");
 
       const response = await api.get("/jobs");
 
-      const jobList = response.data.jobs || [];
+      const allJobs = response.data.jobs || [];
 
-      setJobs(jobList);
-    } catch (error) {
-      console.error("FETCH JOBS ERROR:", error);
-    } finally {
-      setJobsLoading(false);
-    }
-  };
+      const recruiterId = user?.id || user?._id;
 
-  // ========================================
-  // FETCH APPLICANTS
-  // ========================================
+      const recruiterJobs = allJobs.filter((job) => {
+        const jobRecruiterId =
+          job.recruiter?._id ||
+          job.recruiter?.id ||
+          job.recruiter;
 
-  const fetchApplicants = async () => {
-    try {
-      setLoading(true);
-      setError("");
+        return String(jobRecruiterId) === String(recruiterId);
+      });
 
-      const params = {
-        page,
-        limit,
-      };
+      setJobs(recruiterJobs);
 
-      if (search.trim()) {
-        params.search = search.trim();
-      }
+      // If selected job no longer exists
+      if (selectedJob) {
+        const updatedSelectedJob = recruiterJobs.find(
+          (job) => job._id === selectedJob._id
+        );
 
-      if (status) {
-        params.status = status;
-      }
-
-      if (jobId) {
-        params.jobId = jobId;
-      }
-
-      const response = await api.get(
-        "/applications/recruiter-applicants",
-        {
-          params,
+        if (!updatedSelectedJob) {
+          setSelectedJob(null);
+          setApplications([]);
+        } else {
+          setSelectedJob(updatedSelectedJob);
         }
-      );
-
-      const data = response.data;
-
-      setApplicants(data.applicants || []);
-
-      setTotalApplicants(
-        data.totalApplicants ||
-          data.total ||
-          data.count ||
-          0
-      );
-
-      setTotalPages(
-        data.totalPages ||
-          Math.max(
-            1,
-            Math.ceil(
-              (data.totalApplicants ||
-                data.total ||
-                0) / limit
-            )
-          )
-      );
+      }
     } catch (error) {
-      console.error(
-        "FETCH RECRUITER APPLICANTS ERROR:",
-        error
-      );
-
-      setApplicants([]);
+      console.error("FETCH RECRUITER JOBS ERROR:", error);
 
       setError(
         error.response?.data?.message ||
-          "Failed to load applicants."
+        "Failed to load your jobs. Please try again."
       );
     } finally {
-      setLoading(false);
+      setLoadingJobs(false);
     }
   };
 
-  // ========================================
-  // INITIAL LOAD
-  // ========================================
-
-  useEffect(() => {
-    fetchJobs();
-  }, []);
-
-  // ========================================
-  // FETCH APPLICANTS
-  // ========================================
-
-  useEffect(() => {
-    fetchApplicants();
-  }, [page, searchParams]);
-
-  // ========================================
-  // UPDATE URL
-  // ========================================
-
-  const updateFilters = (
-    newSearch,
-    newStatus,
-    newJobId,
-    newPage = 1
-  ) => {
-    const params = {};
-
-    if (newSearch.trim()) {
-      params.search = newSearch.trim();
-    }
-
-    if (newStatus) {
-      params.status = newStatus;
-    }
-
-    if (newJobId) {
-      params.jobId = newJobId;
-    }
-
-    if (newPage > 1) {
-      params.page = newPage;
-    }
-
-    setSearchParams(params);
-  };
-
-  // ========================================
-  // SEARCH
-  // ========================================
-
-  const handleSearch = (event) => {
-    event.preventDefault();
-
-    setPage(1);
-
-    updateFilters(
-      search,
-      status,
-      jobId,
-      1
-    );
-  };
-
-  // ========================================
-  // STATUS FILTER
-  // ========================================
-
-  const handleStatusChange = (event) => {
-    const value = event.target.value;
-
-    setStatus(value);
-    setPage(1);
-
-    updateFilters(
-      search,
-      value,
-      jobId,
-      1
-    );
-  };
-
-  // ========================================
-  // JOB FILTER
-  // ========================================
-
-  const handleJobChange = (event) => {
-    const value = event.target.value;
-
-    setJobId(value);
-    setPage(1);
-
-    updateFilters(
-      search,
-      status,
-      value,
-      1
-    );
-  };
-
-  // ========================================
-  // CLEAR FILTERS
-  // ========================================
-
-  const handleClearFilters = () => {
-    setSearch("");
-    setStatus("");
-    setJobId("");
-    setPage(1);
-
-    setSearchParams({});
-  };
-
-  // ========================================
-  // STATUS UPDATE
-  // ========================================
-
-  const handleStatusUpdate = async (
-    applicationId,
-    newStatus
-  ) => {
+  // ================================
+  // Fetch Applicants
+  // ================================
+  const fetchApplicants = async (jobId) => {
     try {
-      setUpdatingId(applicationId);
+      setLoadingApplicants(true);
+      setError("");
+
+      const response = await api.get(`/applications/job/${jobId}`);
+
+      setApplications(response.data.applications || []);
+    } catch (error) {
+      console.error("FETCH APPLICANTS ERROR:", error);
+
+      setApplications([]);
+
+      setError(
+        error.response?.data?.message ||
+        "Failed to load applicants."
+      );
+    } finally {
+      setLoadingApplicants(false);
+    }
+  };
+
+  // ================================
+  // Select Job
+  // ================================
+  const handleSelectJob = (job) => {
+    setSelectedJob(job);
+    setApplications([]);
+    setSuccess("");
+    fetchApplicants(job._id);
+  };
+
+  // ================================
+  // Refresh Applicants
+  // ================================
+  const handleRefreshApplicants = () => {
+    if (!selectedJob) return;
+
+    fetchApplicants(selectedJob._id);
+  };
+
+  // ================================
+  // Delete Job
+  // ================================
+  const handleDeleteJob = async (jobId) => {
+    const confirmed = window.confirm(
+      "Are you sure you want to delete this job?\n\nThis action cannot be undone."
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setDeletingJob(jobId);
       setError("");
       setSuccess("");
 
-      const response = await api.put(
-        `/applications/${applicationId}/status`,
+      await api.delete(`/jobs/${jobId}`);
+
+      setJobs((prevJobs) =>
+        prevJobs.filter((job) => job._id !== jobId)
+      );
+
+      // If deleted job was selected
+      if (selectedJob?._id === jobId) {
+        setSelectedJob(null);
+        setApplications([]);
+      }
+
+      setSuccess("Job deleted successfully.");
+
+      setTimeout(() => {
+        setSuccess("");
+      }, 3000);
+    } catch (error) {
+      console.error("DELETE JOB ERROR:", error);
+
+      setError(
+        error.response?.data?.message ||
+        "Failed to delete job. Please try again."
+      );
+    } finally {
+      setDeletingJob(null);
+    }
+  };
+
+  // ================================
+  // CLOSE / REOPEN JOB
+  // ================================
+  const handleJobStatus = async (jobId, currentStatus) => {
+    const newStatus =
+      currentStatus === "Closed"
+        ? "Active"
+        : "Closed";
+
+    const confirmMessage =
+      newStatus === "Closed"
+        ? "Are you sure you want to close this job?\n\nCandidates will not be able to apply once applications are closed."
+        : "Are you sure you want to reopen this job?";
+
+    const confirmed = window.confirm(confirmMessage);
+
+    if (!confirmed) return;
+
+    try {
+      setUpdatingJobStatus(jobId);
+      setError("");
+      setSuccess("");
+
+      const response = await api.patch(
+        `/jobs/${jobId}/status`,
         {
           status: newStatus,
         }
       );
 
-      if (response.data.success) {
-        setSuccess(
-          "Application status updated successfully."
-        );
+      const updatedJob = response.data.job;
 
-        setApplicants((previous) =>
-          previous.map((application) =>
-            application._id === applicationId
-              ? {
-                  ...application,
-                  status: newStatus,
-                }
-              : application
-          )
-        );
-
-        setTimeout(() => {
-          setSuccess("");
-        }, 2500);
-      }
-    } catch (error) {
-      console.error(
-        "UPDATE APPLICATION STATUS ERROR:",
-        error
+      // Update job in jobs list
+      setJobs((prevJobs) =>
+        prevJobs.map((job) =>
+          job._id === jobId
+            ? {
+              ...job,
+              status:
+                updatedJob?.status || newStatus,
+            }
+            : job
+        )
       );
+
+      // Update selected job if same job
+      if (selectedJob?._id === jobId) {
+        setSelectedJob((prevJob) =>
+          prevJob
+            ? {
+              ...prevJob,
+              status:
+                updatedJob?.status || newStatus,
+            }
+            : prevJob
+        );
+      }
+
+      setSuccess(
+        newStatus === "Closed"
+          ? "Job closed successfully."
+          : "Job reopened successfully."
+      );
+
+      setTimeout(() => {
+        setSuccess("");
+      }, 3000);
+    } catch (error) {
+      console.error("UPDATE JOB STATUS ERROR:", error);
 
       setError(
         error.response?.data?.message ||
-          "Failed to update application status."
+        "Failed to update job status. Please try again."
       );
     } finally {
-      setUpdatingId(null);
+      setUpdatingJobStatus(null);
     }
   };
 
-  // ========================================
-  // VIEW PROFILE
-  // ========================================
+  // ================================
+  // Update Application Status
+  // ================================
+  const updateStatus = async (applicationId, status) => {
+    try {
+      setUpdatingApplication(applicationId);
+      setError("");
+      setSuccess("");
 
-  const handleViewProfile = (applicationId) => {
-    navigate(
-      `/candidate-profile/${applicationId}`
-    );
+      const response = await api.put(
+        `/applications/${applicationId}/status`,
+        { status }
+      );
+
+      const updatedStatus =
+        response.data.application?.status || status;
+
+      setApplications((prevApplications) =>
+        prevApplications.map((application) =>
+          application._id === applicationId
+            ? {
+              ...application,
+              status: updatedStatus,
+            }
+            : application
+        )
+      );
+
+      setSuccess(
+        `Application status updated to "${updatedStatus}".`
+      );
+
+      setTimeout(() => {
+        setSuccess("");
+      }, 3000);
+    } catch (error) {
+      console.error("UPDATE STATUS ERROR:", error);
+
+      setError(
+        error.response?.data?.message ||
+        "Failed to update application status."
+      );
+    } finally {
+      setUpdatingApplication(null);
+    }
   };
 
-  // ========================================
-  // VIEW RESUME
-  // ========================================
-
-  const handleViewResume = (resume) => {
-    if (!resume) {
-      setError("Resume is not available.");
-      return;
-    }
-
-    window.open(
-      `${backendUrl}${resume}`,
-      "_blank",
-      "noopener,noreferrer"
-    );
+  // ================================
+  // Status Count
+  // ================================
+  const getStatusCount = (status) => {
+    return applications.filter(
+      (application) => application.status === status
+    ).length;
   };
 
-  // ========================================
-  // PAGINATION
-  // ========================================
+  // ================================
+  // Format Date
+  // ================================
+  const formatDate = (date) => {
+    if (!date) return "N/A";
 
-  const handlePageChange = (newPage) => {
-    if (
-      newPage < 1 ||
-      newPage > totalPages ||
-      newPage === page
-    ) {
-      return;
-    }
-
-    setPage(newPage);
-
-    updateFilters(
-      search,
-      status,
-      jobId,
-      newPage
-    );
-
-    window.scrollTo({
-      top: 0,
-      behavior: "smooth",
+    return new Date(date).toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
     });
   };
 
-  // ========================================
-  // STATUS CLASS
-  // ========================================
-
-  const getStatusClass = (applicationStatus) => {
-    switch (applicationStatus) {
+  // ================================
+  // Application Status Class
+  // ================================
+  const getStatusClass = (status) => {
+    switch (status) {
       case "Applied":
         return "status-applied";
 
@@ -378,398 +327,1344 @@ const RecruiterApplicants = () => {
         return "status-rejected";
 
       default:
-        return "status-default";
+        return "status-applied";
     }
   };
 
-  // ========================================
-  // FORMAT DATE
-  // ========================================
+  // ================================
+  // Initial Fetch
+  // ================================
+  useEffect(() => {
+    const userId = user?.id || user?._id;
 
-  const formatDate = (date) => {
-    if (!date) {
-      return "N/A";
+    if (userId) {
+      fetchJobs();
+    } else {
+      setLoadingJobs(false);
     }
-
-    return new Date(date).toLocaleDateString(
-      "en-IN",
-      {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-      }
-    );
-  };
-
-  // ========================================
-  // LOADING
-  // ========================================
-
-  if (loading && applicants.length === 0) {
-    return (
-      <>
-        <style>{`
-          .app-loading-page {
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            background: #f5f7fb;
-            font-family: Arial, Helvetica, sans-serif;
-            color: #374151;
-          }
-
-          .app-loader {
-            width: 45px;
-            height: 45px;
-            border: 4px solid #e5e7eb;
-            border-top-color: #2563eb;
-            border-radius: 50%;
-            animation: appSpin 0.8s linear infinite;
-            margin-bottom: 18px;
-          }
-
-          @keyframes appSpin {
-            to {
-              transform: rotate(360deg);
-            }
-          }
-        `}</style>
-
-        <div className="app-loading-page">
-          <div className="app-loader"></div>
-          <h2>Loading applicants...</h2>
-        </div>
-      </>
-    );
-  }
+  }, [user]);
 
   return (
-    <>
+    <div className="recruiter-dashboard">
+
+      {/* ======================================
+          NAVBAR
+      ====================================== */}
+
+      <nav className="navbar">
+
+        <div className="navbar-left">
+          <Link
+            to="/recruiter-dashboard"
+            className="logo"
+          >
+            JobPortal
+          </Link>
+        </div>
+
+        <div className="navbar-right">
+
+          <span className="welcome-text">
+            Hi, {user?.name || "Recruiter"} 👋
+          </span>
+
+          <Link
+            to="/create-job"
+            className="create-job-nav-btn"
+          >
+            + Create Job
+          </Link>
+
+          <button
+            onClick={logout}
+            className="logout-btn"
+          >
+            Logout
+          </button>
+
+        </div>
+
+      </nav>
+
+      {/* ======================================
+          MAIN CONTENT
+      ====================================== */}
+
+      <main className="dashboard-container">
+
+        {/* HEADER */}
+
+        <div className="dashboard-header">
+
+          <div>
+            <h1>Recruiter Dashboard</h1>
+
+            <p>
+              Manage your jobs and applications from one place.
+            </p>
+          </div>
+
+          <Link
+            to="/create-job"
+            className="create-job-main-btn"
+          >
+            + Post New Job
+          </Link>
+
+        </div>
+
+        {/* SUCCESS MESSAGE */}
+
+        {success && (
+          <div className="success-message">
+            <span>✓</span>
+            {success}
+          </div>
+        )}
+
+        {/* ERROR MESSAGE */}
+
+        {error && (
+          <div className="error-message">
+            <span>⚠</span>
+            {error}
+
+            <button
+              onClick={() => setError("")}
+              className="close-error"
+            >
+              ×
+            </button>
+          </div>
+        )}
+
+        {/* ======================================
+            JOBS SECTION
+        ====================================== */}
+
+        <section className="jobs-section">
+
+          <div className="section-header">
+
+            <div>
+              <h2>My Jobs</h2>
+
+              <p>
+                {jobs.length}{" "}
+                {jobs.length === 1
+                  ? "job"
+                  : "jobs"}{" "}
+                posted
+              </p>
+            </div>
+
+            <button
+              onClick={fetchJobs}
+              className="refresh-btn"
+              disabled={loadingJobs}
+            >
+              🔄 Refresh
+            </button>
+
+          </div>
+
+          {/* LOADING */}
+
+          {loadingJobs && (
+            <div className="loading-container">
+
+              <div className="spinner"></div>
+
+              <p>
+                Loading your jobs...
+              </p>
+
+            </div>
+          )}
+
+          {/* NO JOBS */}
+
+          {!loadingJobs &&
+            jobs.length === 0 && (
+              <div className="empty-state">
+
+                <div className="empty-icon">
+                  💼
+                </div>
+
+                <h3>
+                  No Jobs Posted Yet
+                </h3>
+
+                <p>
+                  Start attracting talented candidates by
+                  posting your first job.
+                </p>
+
+                <Link
+                  to="/create-job"
+                  className="create-job-main-btn"
+                >
+                  + Create Your First Job
+                </Link>
+
+              </div>
+            )}
+
+          {/* JOB CARDS */}
+
+          {!loadingJobs &&
+            jobs.length > 0 && (
+              <div className="jobs-grid">
+
+                {jobs.map((job) => {
+
+                  const jobStatus =
+                    job.status || "Active";
+
+                  return (
+                    <div
+                      className={`job-card ${selectedJob?._id === job._id
+                          ? "selected-job-card"
+                          : ""
+                        } ${jobStatus === "Closed"
+                          ? "closed-job-card"
+                          : ""
+                        }`}
+                      key={job._id}
+                    >
+
+                      {/* JOB HEADER */}
+
+                      <div className="job-card-header">
+
+                        <div>
+                          <h3>
+                            {job.title}
+                          </h3>
+
+                          <p className="company-name">
+                            🏢 {job.company}
+                          </p>
+                        </div>
+
+                        <div className="job-badges">
+
+                          <span className="job-type-badge">
+                            {job.jobType}
+                          </span>
+
+                          <span
+                            className={`job-status-badge ${jobStatus === "Closed"
+                                ? "job-status-closed"
+                                : "job-status-active"
+                              }`}
+                          >
+                            {jobStatus === "Closed"
+                              ? "● Closed"
+                              : "● Active"}
+                          </span>
+
+                        </div>
+
+                      </div>
+
+                      {/* CLOSED NOTICE */}
+
+                      {jobStatus === "Closed" && (
+                        <div className="closed-notice">
+                          🔒 Applications are closed
+                        </div>
+                      )}
+
+                      {/* JOB INFO */}
+
+                      <div className="job-info">
+
+                        <div className="info-item">
+                          <span>📍</span>
+
+                          <span>
+                            {job.location ||
+                              "Location not specified"}
+                          </span>
+                        </div>
+
+                        <div className="info-item">
+                          <span>💰</span>
+
+                          <span>
+                            {job.salary
+                              ? `₹${Number(
+                                job.salary
+                              ).toLocaleString(
+                                "en-IN"
+                              )}`
+                              : "Salary not specified"}
+                          </span>
+                        </div>
+
+                        <div className="info-item">
+                          <span>💼</span>
+
+                          <span>
+                            {job.experience ||
+                              "Experience not specified"}
+                          </span>
+                        </div>
+
+                      </div>
+
+                      {/* SKILLS */}
+
+                      {job.skills?.length > 0 && (
+                        <div className="skills-container">
+
+                          {job.skills
+                            .slice(0, 5)
+                            .map(
+                              (
+                                skill,
+                                index
+                              ) => (
+                                <span
+                                  className="skill-tag"
+                                  key={index}
+                                >
+                                  {skill}
+                                </span>
+                              )
+                            )}
+
+                          {job.skills.length > 5 && (
+                            <span className="skill-more">
+                              +
+                              {job.skills.length -
+                                5}
+                            </span>
+                          )}
+
+                        </div>
+                      )}
+
+                      {/* POSTED DATE */}
+
+                      <p className="posted-date">
+                        Posted on{" "}
+                        {formatDate(
+                          job.createdAt
+                        )}
+                      </p>
+
+                      {/* ACTIONS */}
+
+                      <div className="job-actions">
+
+                        <button
+                          onClick={() =>
+                            handleSelectJob(job)
+                          }
+                          className={`applicants-btn ${selectedJob?._id ===
+                              job._id
+                              ? "active"
+                              : ""
+                            }`}
+                        >
+                          👥 Applicants
+                        </button>
+
+                        <Link
+                          to={`/edit-job/${job._id}`}
+                          className="edit-btn"
+                        >
+                          ✏️ Edit
+                        </Link>
+
+                        <button
+                          onClick={() =>
+                            handleJobStatus(
+                              job._id,
+                              jobStatus
+                            )
+                          }
+                          className={
+                            jobStatus === "Closed"
+                              ? "reopen-job-btn"
+                              : "close-job-btn"
+                          }
+                          disabled={
+                            updatingJobStatus ===
+                            job._id
+                          }
+                        >
+                          {updatingJobStatus ===
+                            job._id
+                            ? "Updating..."
+                            : jobStatus === "Closed"
+                              ? "↗ Reopen"
+                              : "🔒 Close"}
+                        </button>
+
+
+                        <Link
+                          to={`/job-analytics/${job._id}`}
+                          className="analytics-btn"
+                        >
+                          📊 Analytics
+                        </Link>
+
+
+
+                        <Link
+                          to="/recruiter-applicants"
+                          className="all-applicants-btn"
+                        >
+                          👥 All Applicants
+                        </Link>
+
+                        <button
+                          onClick={() =>
+                            handleDeleteJob(
+                              job._id
+                            )
+                          }
+                          className="delete-btn"
+                          disabled={
+                            deletingJob ===
+                            job._id
+                          }
+                        >
+                          {deletingJob ===
+                            job._id
+                            ? "Deleting..."
+                            : "🗑️ Delete"}
+                        </button>
+
+                      </div>
+
+                    </div>
+                  );
+                })}
+
+              </div>
+            )}
+
+        </section>
+
+        {/* ======================================
+            APPLICANTS MANAGEMENT
+        ====================================== */}
+
+        {selectedJob && (
+          <section className="applicants-section">
+
+            {/* APPLICANTS HEADER */}
+
+            <div className="applicants-header">
+
+              <div>
+
+                <p className="section-label">
+                  APPLICANTS MANAGEMENT
+                </p>
+
+                <h2>
+                  {selectedJob.title}
+                </h2>
+
+                <p>
+                  {selectedJob.company} •{" "}
+                  {selectedJob.location}
+                </p>
+
+              </div>
+
+              <div className="applicant-header-actions">
+
+                <button
+                  onClick={
+                    handleRefreshApplicants
+                  }
+                  className="refresh-btn"
+                  disabled={
+                    loadingApplicants
+                  }
+                >
+                  🔄 Refresh
+                </button>
+
+                <button
+                  onClick={() => {
+                    setSelectedJob(null);
+                    setApplications([]);
+                  }}
+                  className="close-applicants-btn"
+                >
+                  ✕ Close
+                </button>
+
+              </div>
+
+            </div>
+
+            {/* STATUS SUMMARY */}
+
+            {!loadingApplicants &&
+              applications.length > 0 && (
+                <div className="status-summary">
+
+                  <div className="summary-card">
+                    <span className="summary-number">
+                      {applications.length}
+                    </span>
+
+                    <span className="summary-label">
+                      Total
+                    </span>
+                  </div>
+
+                  <div className="summary-card applied-summary">
+                    <span className="summary-number">
+                      {getStatusCount("Applied")}
+                    </span>
+
+                    <span className="summary-label">
+                      Applied
+                    </span>
+                  </div>
+
+                  <div className="summary-card shortlisted-summary">
+                    <span className="summary-number">
+                      {getStatusCount(
+                        "Shortlisted"
+                      )}
+                    </span>
+
+                    <span className="summary-label">
+                      Shortlisted
+                    </span>
+                  </div>
+
+                  <div className="summary-card interview-summary">
+                    <span className="summary-number">
+                      {getStatusCount(
+                        "Interview"
+                      )}
+                    </span>
+
+                    <span className="summary-label">
+                      Interview
+                    </span>
+                  </div>
+
+                  <div className="summary-card selected-summary">
+                    <span className="summary-number">
+                      {getStatusCount(
+                        "Selected"
+                      )}
+                    </span>
+
+                    <span className="summary-label">
+                      Selected
+                    </span>
+                  </div>
+
+                  <div className="summary-card rejected-summary">
+                    <span className="summary-number">
+                      {getStatusCount(
+                        "Rejected"
+                      )}
+                    </span>
+
+                    <span className="summary-label">
+                      Rejected
+                    </span>
+                  </div>
+
+                </div>
+              )}
+
+            {/* APPLICANTS LOADING */}
+
+            {loadingApplicants && (
+              <div className="loading-container">
+
+                <div className="spinner"></div>
+
+                <p>
+                  Loading applicants...
+                </p>
+
+              </div>
+            )}
+
+            {/* NO APPLICANTS */}
+
+            {!loadingApplicants &&
+              applications.length === 0 && (
+                <div className="empty-applicants">
+
+                  <div className="empty-icon">
+                    👥
+                  </div>
+
+                  <h3>
+                    No Applicants Yet
+                  </h3>
+
+                  <p>
+                    Candidates who apply for this
+                    job will appear here.
+                  </p>
+
+                </div>
+              )}
+
+            {/* APPLICANTS LIST */}
+
+            {!loadingApplicants &&
+              applications.length > 0 && (
+                <div className="applicants-list">
+
+                  {applications.map(
+                    (application) => {
+
+                      const candidate =
+                        application.candidate ||
+                        {};
+
+                      return (
+                        <div
+                          className="applicant-card"
+                          key={
+                            application._id
+                          }
+                        >
+
+                          {/* CANDIDATE INFO */}
+
+                          <div className="candidate-info">
+
+                            <div className="candidate-avatar">
+                              {candidate.name
+                                ?.charAt(0)
+                                ?.toUpperCase() ||
+                                "C"}
+                            </div>
+
+                            <div>
+
+                              <h3>
+                                {candidate.name ||
+                                  "Candidate"}
+                              </h3>
+
+                              <p>
+                                📧{" "}
+                                {candidate.email ||
+                                  "Email not available"}
+                              </p>
+
+                              <p className="application-date">
+                                Applied on{" "}
+                                {formatDate(
+                                  application.createdAt
+                                )}
+                              </p>
+
+                            </div>
+
+                          </div>
+
+                          {/* APPLICATION STATUS */}
+
+                          <div className="application-status-area">
+
+                            <span
+                              className={`status-badge ${getStatusClass(
+                                application.status
+                              )}`}
+                            >
+                              {application.status}
+                            </span>
+
+                            <select
+                              value={
+                                application.status ||
+                                "Applied"
+                              }
+                              onChange={(e) =>
+                                updateStatus(
+                                  application._id,
+                                  e.target.value
+                                )
+                              }
+                              disabled={
+                                updatingApplication ===
+                                application._id
+                              }
+                              className="status-select"
+                            >
+
+                              <option value="Applied">
+                                Applied
+                              </option>
+
+                              <option value="Shortlisted">
+                                Shortlisted
+                              </option>
+
+                              <option value="Interview">
+                                Interview
+                              </option>
+
+                              <option value="Selected">
+                                Selected
+                              </option>
+
+                              <option value="Rejected">
+                                Rejected
+                              </option>
+
+                            </select>
+
+                            {updatingApplication ===
+                              application._id && (
+                                <span className="updating-text">
+                                  Updating...
+                                </span>
+                              )}
+
+                          </div>
+
+                          {/* APPLICATION ACTIONS */}
+
+                          <div className="applicant-actions">
+
+                            {application.resume ? (
+                              <a
+                                href={`https://job-portal-platform-sakq.onrender.com${application.resume}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="resume-btn"
+                              >
+                                📄 View Resume
+                              </a>
+                            ) : (
+                              <span className="no-resume">
+                                No Resume
+                              </span>
+                            )}
+
+                          </div>
+
+                        </div>
+                      );
+                    }
+                  )}
+
+                </div>
+              )}
+
+          </section>
+        )}
+
+      </main>
+
+      {/* ======================================
+          STYLES
+      ====================================== */}
+
       <style>{`
+
         * {
           box-sizing: border-box;
         }
 
-        body {
-          margin: 0;
-          font-family: Arial, Helvetica, sans-serif;
-          background: #f5f7fb;
-        }
-
-        .applicants-page {
+        .recruiter-dashboard {
           min-height: 100vh;
-          background: #f5f7fb;
-          padding-bottom: 50px;
+          background: #f8fafc;
+          color: #0f172a;
         }
 
-        /* ========================================
-           NAVBAR
-        ======================================== */
+        /* ================= NAVBAR ================= */
 
-        .applicants-navbar {
-          height: 70px;
+        .navbar {
+          height: 72px;
+          padding: 0 6%;
           background: #ffffff;
-          border-bottom: 1px solid #e5e7eb;
-
+          border-bottom: 1px solid #e2e8f0;
           display: flex;
           align-items: center;
           justify-content: space-between;
-
-          padding: 0 6%;
+          position: sticky;
+          top: 0;
+          z-index: 100;
         }
 
-        .applicants-navbar h2 {
-          margin: 0;
+        .logo {
+          text-decoration: none;
+          font-size: 24px;
+          font-weight: 800;
           color: #2563eb;
+        }
+
+        .navbar-right {
+          display: flex;
+          align-items: center;
+          gap: 14px;
+        }
+
+        .welcome-text {
+          font-size: 14px;
+          color: #475569;
+          font-weight: 600;
+        }
+
+        .create-job-nav-btn,
+        .create-job-main-btn {
+          text-decoration: none;
+          border: none;
+          cursor: pointer;
+          background: #2563eb;
+          color: white;
+          font-weight: 700;
+          border-radius: 8px;
+          transition: 0.2s ease;
+        }
+
+        .create-job-nav-btn {
+          padding: 10px 16px;
+          font-size: 14px;
+        }
+
+        .create-job-main-btn {
+          display: inline-block;
+          padding: 12px 18px;
+          font-size: 14px;
+        }
+
+        .create-job-nav-btn:hover,
+        .create-job-main-btn:hover {
+          background: #1d4ed8;
+          transform: translateY(-1px);
+        }
+
+        .logout-btn {
+          border: 1px solid #e2e8f0;
+          background: white;
+          color: #475569;
+          padding: 10px 15px;
+          border-radius: 8px;
+          cursor: pointer;
+          font-weight: 600;
+        }
+
+        .logout-btn:hover {
+          background: #f1f5f9;
+        }
+
+        /* ================= MAIN ================= */
+
+        .dashboard-container {
+          width: 90%;
+          max-width: 1400px;
+          margin: auto;
+          padding: 40px 0 70px;
+        }
+
+        .dashboard-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 20px;
+          margin-bottom: 30px;
+        }
+
+        .dashboard-header h1 {
+          margin: 0 0 8px;
+          font-size: 32px;
+        }
+
+        .dashboard-header p {
+          margin: 0;
+          color: #64748b;
+        }
+
+        /* ================= MESSAGES ================= */
+
+        .success-message,
+        .error-message {
+          padding: 14px 18px;
+          border-radius: 10px;
+          margin-bottom: 22px;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          font-size: 14px;
+          font-weight: 600;
+        }
+
+        .success-message {
+          background: #ecfdf5;
+          color: #047857;
+          border: 1px solid #a7f3d0;
+        }
+
+        .error-message {
+          background: #fef2f2;
+          color: #b91c1c;
+          border: 1px solid #fecaca;
+        }
+
+        .close-error {
+          margin-left: auto;
+          border: none;
+          background: transparent;
+          color: inherit;
+          cursor: pointer;
+          font-size: 20px;
+        }
+
+        /* ================= SECTION ================= */
+
+        .jobs-section,
+        .applicants-section {
+          background: white;
+          border: 1px solid #e2e8f0;
+          border-radius: 16px;
+          padding: 26px;
+          margin-bottom: 30px;
+        }
+
+        .section-header,
+        .applicants-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 20px;
+          margin-bottom: 24px;
+        }
+
+        .section-header h2,
+        .applicants-header h2 {
+          margin: 0 0 5px;
           font-size: 23px;
         }
 
-        .dashboard-btn {
-          border: none;
-          background: #2563eb;
-          color: #ffffff;
-
-          padding: 10px 18px;
-          border-radius: 7px;
-
-          font-size: 14px;
-          font-weight: 600;
-
-          cursor: pointer;
-          transition: 0.2s;
-        }
-
-        .dashboard-btn:hover {
-          background: #1d4ed8;
-        }
-
-        /* ========================================
-           CONTAINER
-        ======================================== */
-
-        .applicants-container {
-          width: 92%;
-          max-width: 1250px;
-          margin: 35px auto;
-        }
-
-        .page-header {
-          margin-bottom: 25px;
-        }
-
-        .page-header h1 {
-          margin: 0 0 8px;
-          color: #111827;
-          font-size: 31px;
-        }
-
-        .page-header p {
+        .section-header p,
+        .applicants-header p {
           margin: 0;
-          color: #6b7280;
-          font-size: 15px;
-        }
-
-        /* ========================================
-           ALERTS
-        ======================================== */
-
-        .alert {
-          padding: 13px 16px;
-          border-radius: 8px;
-          margin-bottom: 18px;
+          color: #64748b;
           font-size: 14px;
         }
 
-        .alert-error {
-          background: #fee2e2;
-          border: 1px solid #fecaca;
-          color: #b91c1c;
+        .section-label {
+          color: #2563eb !important;
+          font-weight: 800 !important;
+          font-size: 12px !important;
+          letter-spacing: 0.08em;
+          margin-bottom: 6px !important;
         }
 
-        .alert-success {
+        .refresh-btn,
+        .close-applicants-btn {
+          border: 1px solid #e2e8f0;
+          background: white;
+          padding: 9px 14px;
+          border-radius: 8px;
+          cursor: pointer;
+          font-weight: 600;
+          color: #475569;
+        }
+
+        .refresh-btn:hover,
+        .close-applicants-btn:hover {
+          background: #f8fafc;
+        }
+
+        .refresh-btn:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+        }
+
+        /* ================= JOB GRID ================= */
+
+        .jobs-grid {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 20px;
+        }
+
+        .job-card {
+          border: 1px solid #e2e8f0;
+          border-radius: 14px;
+          padding: 20px;
+          background: #ffffff;
+          transition: 0.2s ease;
+        }
+
+        .job-card:hover {
+          border-color: #bfdbfe;
+          box-shadow: 0 8px 25px rgba(15, 23, 42, 0.07);
+          transform: translateY(-2px);
+        }
+
+        .selected-job-card {
+          border-color: #2563eb;
+          box-shadow: 0 0 0 2px #dbeafe;
+        }
+
+        .closed-job-card {
+          background: #fafafa;
+        }
+
+        /* ================= JOB HEADER ================= */
+
+        .job-card-header {
+          display: flex;
+          justify-content: space-between;
+          gap: 10px;
+          margin-bottom: 18px;
+        }
+
+        .job-card-header h3 {
+          margin: 0 0 6px;
+          font-size: 18px;
+        }
+
+        .company-name {
+          margin: 0;
+          color: #64748b;
+          font-size: 14px;
+        }
+
+        .job-badges {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-end;
+          gap: 6px;
+        }
+
+        .job-type-badge {
+          height: fit-content;
+          background: #eff6ff;
+          color: #1d4ed8;
+          padding: 6px 9px;
+          border-radius: 999px;
+          font-size: 11px;
+          font-weight: 700;
+          white-space: nowrap;
+        }
+
+        /* ================= JOB STATUS ================= */
+
+        .job-status-badge {
+          padding: 5px 9px;
+          border-radius: 999px;
+          font-size: 10px;
+          font-weight: 800;
+          white-space: nowrap;
+        }
+
+        .job-status-active {
           background: #dcfce7;
-          border: 1px solid #bbf7d0;
           color: #15803d;
         }
 
-        /* ========================================
-           FILTERS
-        ======================================== */
+        .job-status-closed {
+          background: #fee2e2;
+          color: #b91c1c;
+        }
 
-        .filters-card {
-          background: #ffffff;
-          padding: 20px;
-          border-radius: 12px;
-          box-shadow:
-            0 3px 12px rgba(0, 0, 0, 0.06);
+        .closed-notice {
+          background: #fff7ed;
+          border: 1px solid #fed7aa;
+          color: #c2410c;
+          border-radius: 8px;
+          padding: 9px 11px;
+          margin-bottom: 15px;
+          font-size: 12px;
+          font-weight: 700;
+        }
 
+        /* ================= JOB INFO ================= */
+
+        .job-info {
+          display: flex;
+          flex-direction: column;
+          gap: 9px;
+          margin-bottom: 15px;
+        }
+
+        .info-item {
+          display: flex;
+          gap: 8px;
+          color: #475569;
+          font-size: 13px;
+        }
+
+        .skills-container {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px;
+          margin-bottom: 15px;
+        }
+
+        .skill-tag {
+          background: #f1f5f9;
+          color: #334155;
+          padding: 5px 8px;
+          border-radius: 6px;
+          font-size: 11px;
+          font-weight: 600;
+        }
+
+        .skill-more {
+          background: #e2e8f0;
+          color: #475569;
+          padding: 5px 8px;
+          border-radius: 6px;
+          font-size: 11px;
+          font-weight: 700;
+        }
+
+        .posted-date {
+          color: #94a3b8;
+          font-size: 12px;
+          margin: 0 0 16px;
+        }
+
+        /* ================= JOB ACTIONS ================= */
+
+        .job-actions {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 7px;
+        }
+
+        .job-actions button,
+        .job-actions a {
+          min-height: 38px;
+          border-radius: 7px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          text-decoration: none;
+          font-size: 12px;
+          font-weight: 700;
+          cursor: pointer;
+        }
+
+        .applicants-btn {
+          border: 1px solid #bfdbfe;
+          background: #eff6ff;
+          color: #1d4ed8;
+        }
+
+        .applicants-btn:hover,
+        .applicants-btn.active {
+          background: #2563eb;
+          color: white;
+        }
+
+        .edit-btn {
+          border: 1px solid #fde68a;
+          background: #fffbeb;
+          color: #b45309;
+        }
+
+        .edit-btn:hover {
+          background: #fef3c7;
+        }
+
+        .close-job-btn {
+          border: 1px solid #fed7aa;
+          background: #fff7ed;
+          color: #c2410c;
+        }
+
+        .close-job-btn:hover {
+          background: #ffedd5;
+        }
+
+        .reopen-job-btn {
+          border: 1px solid #bbf7d0;
+          background: #f0fdf4;
+          color: #15803d;
+        }
+
+        .reopen-job-btn:hover {
+          background: #dcfce7;
+        }
+
+        .close-job-btn:disabled,
+        .reopen-job-btn:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+        }
+
+        .analytics-btn {
+          border: 1px solid #ddd6fe;
+          background: #f5f3ff;
+          color: #6d28d9;
+        }
+
+        .analytics-btn:hover {
+          background: #ede9fe;
+        }
+
+        .all-applicants-btn {
+          border: 1px solid #bfdbfe;
+          background: #eff6ff;
+          color: #1d4ed8;
+        }
+
+        .all-applicants-btn:hover {
+          background: #dbeafe;
+        }
+
+        .delete-btn {
+          border: 1px solid #fecaca;
+          background: #fef2f2;
+          color: #dc2626;
+        }
+
+        .delete-btn:hover {
+          background: #fee2e2;
+        }
+
+        .delete-btn:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+        }
+
+        /* ================= APPLICANTS ================= */
+
+        .applicant-header-actions {
+          display: flex;
+          gap: 8px;
+        }
+
+        .applicants-section {
+          scroll-margin-top: 90px;
+        }
+
+        .status-summary {
+          display: grid;
+          grid-template-columns: repeat(6, 1fr);
+          gap: 12px;
           margin-bottom: 25px;
         }
 
-        .filters-form {
-          display: grid;
-          grid-template-columns:
-            minmax(220px, 2fr)
-            minmax(170px, 1fr)
-            minmax(170px, 1fr)
-            auto
-            auto;
-
-          gap: 12px;
-          align-items: end;
-        }
-
-        .filter-group label {
-          display: block;
-          margin-bottom: 7px;
-
-          color: #374151;
-          font-size: 13px;
-          font-weight: 600;
-        }
-
-        .filter-group input,
-        .filter-group select {
-          width: 100%;
-
-          padding: 11px 12px;
-
-          border: 1px solid #d1d5db;
-          border-radius: 7px;
-
-          background: #ffffff;
-          color: #111827;
-
-          font-size: 14px;
-          outline: none;
-        }
-
-        .filter-group input:focus,
-        .filter-group select:focus {
-          border-color: #2563eb;
-
-          box-shadow:
-            0 0 0 3px rgba(37, 99, 235, 0.1);
-        }
-
-        .search-btn {
-          padding: 11px 18px;
-
-          border: none;
-          border-radius: 7px;
-
-          background: #2563eb;
-          color: #ffffff;
-
-          font-size: 14px;
-          font-weight: 600;
-
-          cursor: pointer;
-        }
-
-        .search-btn:hover {
-          background: #1d4ed8;
-        }
-
-        .clear-btn {
-          padding: 10px 17px;
-
-          border: 1px solid #d1d5db;
-          border-radius: 7px;
-
-          background: #ffffff;
-          color: #374151;
-
-          font-size: 14px;
-          font-weight: 600;
-
-          cursor: pointer;
-        }
-
-        .clear-btn:hover {
-          background: #f3f4f6;
-        }
-
-        /* ========================================
-           SUMMARY
-        ======================================== */
-
         .summary-card {
-          background: #ffffff;
+          padding: 15px;
+          border: 1px solid #e2e8f0;
           border-radius: 10px;
-
-          padding: 16px 20px;
-
-          margin-bottom: 20px;
-
-          border: 1px solid #e5e7eb;
+          background: #f8fafc;
+          text-align: center;
         }
 
-        .summary-card strong {
-          color: #111827;
+        .summary-number {
+          display: block;
+          font-size: 22px;
+          font-weight: 800;
+          margin-bottom: 3px;
         }
 
-        .summary-card span {
-          color: #6b7280;
+        .summary-label {
+          color: #64748b;
+          font-size: 12px;
+          font-weight: 600;
         }
 
-        /* ========================================
-           APPLICANTS
-        ======================================== */
+        .applied-summary {
+          background: #eff6ff;
+        }
+
+        .shortlisted-summary {
+          background: #fefce8;
+        }
+
+        .interview-summary {
+          background: #f5f3ff;
+        }
+
+        .selected-summary {
+          background: #ecfdf5;
+        }
+
+        .rejected-summary {
+          background: #fef2f2;
+        }
 
         .applicants-list {
           display: flex;
           flex-direction: column;
-          gap: 16px;
+          gap: 12px;
         }
 
         .applicant-card {
-          background: #ffffff;
-
+          display: grid;
+          grid-template-columns: 1.5fr 1fr auto;
+          align-items: center;
+          gap: 20px;
+          padding: 18px;
+          border: 1px solid #e2e8f0;
           border-radius: 12px;
-
-          padding: 22px;
-
-          border: 1px solid #e5e7eb;
-
-          box-shadow:
-            0 3px 12px rgba(0, 0, 0, 0.05);
         }
 
-        .applicant-top {
-          display: flex;
-          justify-content: space-between;
-          align-items: flex-start;
-          gap: 20px;
+        .applicant-card:hover {
+          background: #fafcff;
         }
 
         .candidate-info {
           display: flex;
-          gap: 15px;
-          align-items: flex-start;
+          align-items: center;
+          gap: 13px;
         }
 
         .candidate-avatar {
-          width: 52px;
-          height: 52px;
-
+          width: 48px;
+          height: 48px;
+          min-width: 48px;
           border-radius: 50%;
-
           background: #dbeafe;
           color: #1d4ed8;
-
           display: flex;
-          justify-content: center;
           align-items: center;
-
-          font-size: 20px;
-          font-weight: 700;
-
-          flex-shrink: 0;
-        }
-
-        .candidate-info h3 {
-          margin: 0 0 6px;
-
-          color: #111827;
+          justify-content: center;
+          font-weight: 800;
           font-size: 18px;
         }
 
-        .candidate-email {
+        .candidate-info h3 {
           margin: 0 0 5px;
-
-          color: #6b7280;
-          font-size: 14px;
+          font-size: 15px;
         }
 
-        .applied-job {
-          margin: 0;
-
-          color: #374151;
-          font-size: 14px;
+        .candidate-info p {
+          margin: 2px 0;
+          color: #64748b;
+          font-size: 12px;
         }
 
-        .applied-job strong {
-          color: #2563eb;
+        .application-date {
+          color: #94a3b8 !important;
         }
 
-        /* ========================================
-           STATUS
-        ======================================== */
+        .application-status-area {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          flex-wrap: wrap;
+        }
 
         .status-badge {
-          display: inline-block;
-
-          padding: 6px 11px;
-
-          border-radius: 20px;
-
-          font-size: 12px;
-          font-weight: 700;
-
-          white-space: nowrap;
+          padding: 6px 10px;
+          border-radius: 999px;
+          font-size: 11px;
+          font-weight: 800;
         }
 
         .status-applied {
@@ -779,7 +1674,7 @@ const RecruiterApplicants = () => {
 
         .status-shortlisted {
           background: #fef3c7;
-          color: #92400e;
+          color: #b45309;
         }
 
         .status-interview {
@@ -788,8 +1683,8 @@ const RecruiterApplicants = () => {
         }
 
         .status-selected {
-          background: #dcfce7;
-          color: #15803d;
+          background: #d1fae5;
+          color: #047857;
         }
 
         .status-rejected {
@@ -797,110 +1692,14 @@ const RecruiterApplicants = () => {
           color: #b91c1c;
         }
 
-        .status-default {
-          background: #f3f4f6;
-          color: #374151;
-        }
-
-        /* ========================================
-           DETAILS
-        ======================================== */
-
-        .applicant-details {
-          display: grid;
-
-          grid-template-columns:
-            repeat(3, 1fr);
-
-          gap: 15px;
-
-          margin-top: 20px;
-
-          padding-top: 18px;
-
-          border-top: 1px solid #e5e7eb;
-        }
-
-        .detail-item span {
-          display: block;
-
-          color: #9ca3af;
-
-          font-size: 12px;
-
-          margin-bottom: 4px;
-        }
-
-        .detail-item strong {
-          color: #374151;
-
-          font-size: 14px;
-        }
-
-        /* ========================================
-           ACTIONS
-        ======================================== */
-
-        .applicant-actions {
-          display: flex;
-
-          flex-wrap: wrap;
-
-          gap: 10px;
-
-          margin-top: 20px;
-        }
-
-        .action-btn {
-          padding: 9px 14px;
-
-          border-radius: 7px;
-
-          font-size: 13px;
-          font-weight: 600;
-
-          cursor: pointer;
-
-          transition: 0.2s;
-        }
-
-        .profile-btn {
-          border: none;
-          background: #2563eb;
-          color: #ffffff;
-        }
-
-        .profile-btn:hover {
-          background: #1d4ed8;
-        }
-
-        .resume-btn {
-          border: 1px solid #2563eb;
-          background: #ffffff;
-          color: #2563eb;
-        }
-
-        .resume-btn:hover {
-          background: #eff6ff;
-        }
-
         .status-select {
-          min-width: 145px;
-
-          padding: 9px 12px;
-
-          border: 1px solid #d1d5db;
+          border: 1px solid #cbd5e1;
+          background: white;
           border-radius: 7px;
-
-          background: #ffffff;
-          color: #374151;
-
-          font-size: 13px;
-          font-weight: 600;
-
-          outline: none;
-
+          padding: 7px 9px;
+          font-size: 12px;
           cursor: pointer;
+          outline: none;
         }
 
         .status-select:focus {
@@ -908,666 +1707,238 @@ const RecruiterApplicants = () => {
         }
 
         .status-select:disabled {
-          background: #f3f4f6;
+          opacity: 0.6;
           cursor: not-allowed;
         }
 
-        /* ========================================
-           EMPTY
-        ======================================== */
-
-        .empty-state {
-          background: #ffffff;
-
-          padding: 60px 25px;
-
-          border-radius: 12px;
-
-          text-align: center;
-
-          border: 1px solid #e5e7eb;
+        .updating-text {
+          color: #64748b;
+          font-size: 11px;
         }
 
-        .empty-state-icon {
+        .applicant-actions {
+          display: flex;
+          justify-content: flex-end;
+        }
+
+        .resume-btn {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          text-decoration: none;
+          padding: 9px 13px;
+          border-radius: 8px;
+          background: #f1f5f9;
+          color: #334155;
+          font-size: 12px;
+          font-weight: 700;
+          white-space: nowrap;
+        }
+
+        .resume-btn:hover {
+          background: #e2e8f0;
+        }
+
+        .no-resume {
+          color: #94a3b8;
+          font-size: 12px;
+        }
+
+        /* ================= EMPTY ================= */
+
+        .empty-state,
+        .empty-applicants {
+          text-align: center;
+          padding: 55px 20px;
+          color: #64748b;
+        }
+
+        .empty-icon {
           font-size: 45px;
           margin-bottom: 15px;
         }
 
-        .empty-state h2 {
+        .empty-state h3,
+        .empty-applicants h3 {
+          color: #0f172a;
           margin: 0 0 8px;
-
-          color: #111827;
-          font-size: 22px;
+          font-size: 20px;
         }
 
-        .empty-state p {
-          margin: 0;
-
-          color: #6b7280;
+        .empty-state p,
+        .empty-applicants p {
+          margin: 0 auto 22px;
+          max-width: 450px;
+          line-height: 1.6;
           font-size: 14px;
         }
 
-        /* ========================================
-           PAGINATION
-        ======================================== */
+        /* ================= LOADING ================= */
 
-        .pagination {
+        .loading-container {
+          min-height: 250px;
           display: flex;
-
-          justify-content: center;
+          flex-direction: column;
           align-items: center;
-
-          gap: 8px;
-
-          margin-top: 30px;
+          justify-content: center;
+          color: #64748b;
         }
 
-        .page-btn {
-          min-width: 38px;
-          height: 38px;
-
-          border: 1px solid #d1d5db;
-
-          border-radius: 7px;
-
-          background: #ffffff;
-          color: #374151;
-
-          cursor: pointer;
-
-          font-size: 14px;
-          font-weight: 600;
+        .spinner {
+          width: 35px;
+          height: 35px;
+          border: 3px solid #e2e8f0;
+          border-top-color: #2563eb;
+          border-radius: 50%;
+          animation: spin 0.8s linear infinite;
+          margin-bottom: 12px;
         }
 
-        .page-btn:hover:not(:disabled) {
-          background: #eff6ff;
-          border-color: #2563eb;
-          color: #2563eb;
-        }
-
-        .page-btn.active {
-          background: #2563eb;
-          border-color: #2563eb;
-          color: #ffffff;
-        }
-
-        .page-btn:disabled {
-          opacity: 0.5;
-          cursor: not-allowed;
-        }
-
-        .page-info {
-          color: #6b7280;
-          font-size: 13px;
-
-          margin: 0 8px;
-        }
-
-        /* ========================================
-           RESPONSIVE
-        ======================================== */
-
-        @media (max-width: 1000px) {
-          .filters-form {
-            grid-template-columns:
-              1fr 1fr;
-          }
-
-          .applicant-details {
-            grid-template-columns:
-              repeat(2, 1fr);
+        @keyframes spin {
+          to {
+            transform: rotate(360deg);
           }
         }
 
-        @media (max-width: 700px) {
-          .applicants-navbar {
-            padding: 0 20px;
+        /* ================= RESPONSIVE ================= */
+
+        @media (max-width: 1200px) {
+          .jobs-grid {
+            grid-template-columns: repeat(2, 1fr);
           }
 
-          .applicants-navbar h2 {
-            font-size: 18px;
+          .job-actions {
+            grid-template-columns: repeat(2, 1fr);
           }
 
-          .applicants-container {
-            width: 94%;
-            margin-top: 25px;
+          .status-summary {
+            grid-template-columns: repeat(3, 1fr);
           }
 
-          .page-header h1 {
-            font-size: 26px;
-          }
-
-          .filters-form {
-            grid-template-columns: 1fr;
-          }
-
-          .applicant-top {
-            flex-direction: column;
-          }
-
-          .candidate-info {
-            width: 100%;
-          }
-
-          .applicant-details {
-            grid-template-columns: 1fr;
+          .applicant-card {
+            grid-template-columns: 1fr 1fr;
           }
 
           .applicant-actions {
+            justify-content: flex-start;
+          }
+        }
+
+        @media (max-width: 768px) {
+
+          .navbar {
+            height: auto;
+            padding: 15px 5%;
+            gap: 15px;
+          }
+
+          .navbar-right {
+            flex-wrap: wrap;
+            justify-content: flex-end;
+          }
+
+          .welcome-text {
+            display: none;
+          }
+
+          .dashboard-container {
+            width: 94%;
+            padding-top: 25px;
+          }
+
+          .dashboard-header {
+            flex-direction: column;
+            align-items: flex-start;
+          }
+
+          .jobs-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .jobs-section,
+          .applicants-section {
+            padding: 18px;
+          }
+
+          .section-header,
+          .applicants-header {
+            flex-direction: column;
+            align-items: flex-start;
+          }
+
+          .applicant-header-actions {
+            width: 100%;
+          }
+
+          .applicant-header-actions button {
+            flex: 1;
+          }
+
+          .status-summary {
+            grid-template-columns: repeat(2, 1fr);
+          }
+
+          .applicant-card {
+            grid-template-columns: 1fr;
+          }
+
+          .application-status-area {
+            justify-content: flex-start;
+          }
+
+          .job-actions {
+            grid-template-columns: 1fr;
+          }
+
+          .job-card-header {
             flex-direction: column;
           }
 
-          .action-btn,
-          .status-select {
-            width: 100%;
+          .job-badges {
+            flex-direction: row;
+            align-items: center;
+            justify-content: flex-start;
           }
         }
+
+        @media (max-width: 480px) {
+
+          .navbar {
+            align-items: flex-start;
+          }
+
+          .logo {
+            font-size: 20px;
+          }
+
+          .create-job-nav-btn,
+          .logout-btn {
+            padding: 8px 10px;
+            font-size: 12px;
+          }
+
+          .dashboard-header h1 {
+            font-size: 26px;
+          }
+
+          .status-summary {
+            grid-template-columns: 1fr 1fr;
+          }
+
+          .candidate-info {
+            align-items: flex-start;
+          }
+
+          .job-actions {
+            grid-template-columns: 1fr;
+          }
+        }
+
       `}</style>
 
-      <div className="applicants-page">
-
-        {/* ========================================
-            NAVBAR
-        ======================================== */}
-
-        <nav className="applicants-navbar">
-
-          <h2>
-            Job Portal - Recruiter
-          </h2>
-
-          <button
-            type="button"
-            className="dashboard-btn"
-            onClick={() =>
-              navigate("/recruiter-dashboard")
-            }
-          >
-            Back to Dashboard
-          </button>
-
-        </nav>
-
-        {/* ========================================
-            MAIN
-        ======================================== */}
-
-        <main className="applicants-container">
-
-          <div className="page-header">
-
-            <h1>
-              Recruiter Applicants
-            </h1>
-
-            <p>
-              Manage candidates who applied to your jobs.
-            </p>
-
-          </div>
-
-          {/* ERROR */}
-
-          {error && (
-            <div className="alert alert-error">
-              {error}
-            </div>
-          )}
-
-          {/* SUCCESS */}
-
-          {success && (
-            <div className="alert alert-success">
-              {success}
-            </div>
-          )}
-
-          {/* ========================================
-              FILTERS
-          ======================================== */}
-
-          <div className="filters-card">
-
-            <form
-              className="filters-form"
-              onSubmit={handleSearch}
-            >
-
-              {/* SEARCH */}
-
-              <div className="filter-group">
-
-                <label>
-                  Search Candidate
-                </label>
-
-                <input
-                  type="text"
-                  value={search}
-                  onChange={(event) =>
-                    setSearch(event.target.value)
-                  }
-                  placeholder="Name, email, or job title..."
-                />
-
-              </div>
-
-              {/* STATUS */}
-
-              <div className="filter-group">
-
-                <label>
-                  Status
-                </label>
-
-                <select
-                  value={status}
-                  onChange={handleStatusChange}
-                >
-
-                  <option value="">
-                    All Statuses
-                  </option>
-
-                  <option value="Applied">
-                    Applied
-                  </option>
-
-                  <option value="Shortlisted">
-                    Shortlisted
-                  </option>
-
-                  <option value="Interview">
-                    Interview
-                  </option>
-
-                  <option value="Selected">
-                    Selected
-                  </option>
-
-                  <option value="Rejected">
-                    Rejected
-                  </option>
-
-                </select>
-
-              </div>
-
-              {/* JOB */}
-
-              <div className="filter-group">
-
-                <label>
-                  Job
-                </label>
-
-                <select
-                  value={jobId}
-                  onChange={handleJobChange}
-                  disabled={jobsLoading}
-                >
-
-                  <option value="">
-                    All Jobs
-                  </option>
-
-                  {jobs.map((job) => (
-                    <option
-                      key={job._id}
-                      value={job._id}
-                    >
-                      {job.title}
-                    </option>
-                  ))}
-
-                </select>
-
-              </div>
-
-              {/* SEARCH BUTTON */}
-
-              <button
-                type="submit"
-                className="search-btn"
-              >
-                Search
-              </button>
-
-              {/* CLEAR */}
-
-              <button
-                type="button"
-                className="clear-btn"
-                onClick={handleClearFilters}
-              >
-                Clear
-              </button>
-
-            </form>
-
-          </div>
-
-          {/* ========================================
-              SUMMARY
-          ======================================== */}
-
-          <div className="summary-card">
-
-            <strong>
-              {totalApplicants}
-            </strong>
-
-            <span>
-              {" "}total applicant
-              {totalApplicants !== 1
-                ? "s"
-                : ""}
-            </span>
-
-          </div>
-
-          {/* ========================================
-              APPLICANT LIST
-          ======================================== */}
-
-          {applicants.length === 0 ? (
-
-            <div className="empty-state">
-
-              <div className="empty-state-icon">
-                👥
-              </div>
-
-              <h2>
-                No Applicants Found
-              </h2>
-
-              <p>
-                No candidates match your current
-                search or filters.
-              </p>
-
-            </div>
-
-          ) : (
-
-            <div className="applicants-list">
-
-              {applicants.map((application) => {
-
-                const candidate =
-                  application.candidate || {};
-
-                const job =
-                  application.job || {};
-
-                const candidateName =
-                  candidate.name ||
-                  "Unknown Candidate";
-
-                const initials =
-                  candidateName
-                    .split(" ")
-                    .map(
-                      (word) =>
-                        word.charAt(0)
-                    )
-                    .join("")
-                    .slice(0, 2)
-                    .toUpperCase();
-
-                return (
-                  <div
-                    className="applicant-card"
-                    key={application._id}
-                  >
-
-                    {/* TOP */}
-
-                    <div className="applicant-top">
-
-                      <div className="candidate-info">
-
-                        <div className="candidate-avatar">
-                          {initials}
-                        </div>
-
-                        <div>
-
-                          <h3>
-                            {candidateName}
-                          </h3>
-
-                          <p className="candidate-email">
-                            {candidate.email ||
-                              "Email not available"}
-                          </p>
-
-                          <p className="applied-job">
-
-                            Applied for{" "}
-
-                            <strong>
-                              {job.title ||
-                                "Job not available"}
-                            </strong>
-
-                          </p>
-
-                        </div>
-
-                      </div>
-
-                      <span
-                        className={`status-badge ${getStatusClass(
-                          application.status
-                        )}`}
-                      >
-                        {application.status ||
-                          "Applied"}
-                      </span>
-
-                    </div>
-
-                    {/* DETAILS */}
-
-                    <div className="applicant-details">
-
-                      <div className="detail-item">
-
-                        <span>
-                          Company
-                        </span>
-
-                        <strong>
-                          {job.company ||
-                            "N/A"}
-                        </strong>
-
-                      </div>
-
-                      <div className="detail-item">
-
-                        <span>
-                          Location
-                        </span>
-
-                        <strong>
-                          {job.location ||
-                            "N/A"}
-                        </strong>
-
-                      </div>
-
-                      <div className="detail-item">
-
-                        <span>
-                          Applied On
-                        </span>
-
-                        <strong>
-                          {formatDate(
-                            application.createdAt
-                          )}
-                        </strong>
-
-                      </div>
-
-                    </div>
-
-                    {/* ACTIONS */}
-
-                    <div className="applicant-actions">
-
-                      {/* PROFILE */}
-
-                      <button
-                        type="button"
-                        className="action-btn profile-btn"
-                        onClick={() =>
-                          handleViewProfile(
-                            application._id
-                          )
-                        }
-                      >
-                        View Profile
-                      </button>
-
-                      {/* RESUME */}
-
-                      <button
-                        type="button"
-                        className="action-btn resume-btn"
-                        onClick={() =>
-                          handleViewResume(
-                            application.resume
-                          )
-                        }
-                      >
-                        View Resume
-                      </button>
-
-                      {/* STATUS */}
-
-                      <select
-                        className="status-select"
-                        value={
-                          application.status ||
-                          "Applied"
-                        }
-                        disabled={
-                          updatingId ===
-                          application._id
-                        }
-                        onChange={(event) =>
-                          handleStatusUpdate(
-                            application._id,
-                            event.target.value
-                          )
-                        }
-                      >
-
-                        <option value="Applied">
-                          Applied
-                        </option>
-
-                        <option value="Shortlisted">
-                          Shortlisted
-                        </option>
-
-                        <option value="Interview">
-                          Interview
-                        </option>
-
-                        <option value="Selected">
-                          Selected
-                        </option>
-
-                        <option value="Rejected">
-                          Rejected
-                        </option>
-
-                      </select>
-
-                    </div>
-
-                  </div>
-                );
-              })}
-
-            </div>
-          )}
-
-          {/* ========================================
-              PAGINATION
-          ======================================== */}
-
-          {totalPages > 1 && (
-
-            <div className="pagination">
-
-              <button
-                type="button"
-                className="page-btn"
-                disabled={page === 1}
-                onClick={() =>
-                  handlePageChange(page - 1)
-                }
-              >
-                ‹
-              </button>
-
-              {Array.from(
-                {
-                  length: totalPages,
-                },
-                (_, index) => index + 1
-              ).map((pageNumber) => (
-
-                <button
-                  type="button"
-                  key={pageNumber}
-                  className={`page-btn ${
-                    page === pageNumber
-                      ? "active"
-                      : ""
-                  }`}
-                  onClick={() =>
-                    handlePageChange(
-                      pageNumber
-                    )
-                  }
-                >
-                  {pageNumber}
-                </button>
-
-              ))}
-
-              <span className="page-info">
-                Page {page} of {totalPages}
-              </span>
-
-              <button
-                type="button"
-                className="page-btn"
-                disabled={page === totalPages}
-                onClick={() =>
-                  handlePageChange(page + 1)
-                }
-              >
-                ›
-              </button>
-
-            </div>
-
-          )}
-
-        </main>
-
-      </div>
-    </>
+    </div>
   );
 };
 
-export default RecruiterApplicants;
+export default RecruiterDashboard;
 
