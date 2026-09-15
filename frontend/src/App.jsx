@@ -15,6 +15,7 @@ import RecruiterApplicants from "./pages/RecruiterApplicants";
 import CandidateProfile from "./pages/CandidateProfile";
 import JobAnalytics from "./pages/JobAnalytics";
 import Notifications from "./pages/Notifications";
+import SavedJobs from "./pages/SavedJobs";
 
 import ProtectedRoute from "./components/ProtectedRoute";
 
@@ -141,6 +142,15 @@ function App() {
           element={
           <ProtectedRoute role="candidate">
         <Notifications />
+        </ProtectedRoute>
+        }
+      />
+
+        <Route
+          path="/saved-jobs"
+          element={
+          <ProtectedRoute role="candidate">
+        <SavedJobs />
         </ProtectedRoute>
         }
       />
