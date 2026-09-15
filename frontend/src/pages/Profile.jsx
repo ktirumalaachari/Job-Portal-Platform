@@ -286,7 +286,7 @@ const Profile = () => {
   // Resume URL
   // ==========================================
   const resumeUrl = profile.resume
-    ? `http://localhost:8001${profile.resume}`
+    ? `https://job-portal-platform-sakq.onrender.com${profile.resume}`
     : "";
 
   // ==========================================
