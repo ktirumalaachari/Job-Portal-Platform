@@ -9,7 +9,7 @@ const CreateJob = () => {
   const [formData, setFormData] = useState({
     title: "",
     company: "",
-    discription: "",
+    description: "",
     location: "",
     salary: "",
     skills: "",
@@ -46,7 +46,7 @@ const CreateJob = () => {
       const response = await api.post("/jobs", {
         title: formData.title,
         company: formData.company,
-        discription: formData.discription,
+        description: formData.description,
         location: formData.location,
         salary: formData.salary,
         skills: skillsArray,
