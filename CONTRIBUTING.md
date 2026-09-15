@@ -1,4 +1,4 @@
-# Contributing to Credit Card Fraud Detection System
+# Contributing to Job-Portal-Platform
 
 Thank you for your interest in contributing!  
 We welcome bug reports, feature requests, documentation improvements, and code contributions.
