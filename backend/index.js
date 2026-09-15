@@ -32,6 +32,7 @@ app.use(helmet());
 
 const allowedOrigins = [
   "http://localhost:5173",
+  "https://job-portal-platform-five.vercel.app",
   process.env.FRONTEND_URL,
 ].filter(Boolean);
 
