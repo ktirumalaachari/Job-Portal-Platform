@@ -14,7 +14,7 @@ const jobSchema = new mongoose.Schema(
             trim: true,
         },
 
-        discription: {
+        description: {
             type: String,
             required: true,
             trim: true,
