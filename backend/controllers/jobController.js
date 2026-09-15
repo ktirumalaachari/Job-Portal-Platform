@@ -17,7 +17,7 @@ const createJob = async (req, res) => {
     const {
       title,
       company,
-      discription,
+      description,
       location,
       salary,
       skills,
@@ -32,7 +32,7 @@ const createJob = async (req, res) => {
     if (
       !title ||
       !company ||
-      !discription ||
+      !description ||
       !location ||
       salary === undefined ||
       !skills ||
@@ -52,7 +52,7 @@ const createJob = async (req, res) => {
     const job = await Job.create({
       title,
       company,
-      discription,
+      description,
       location,
       salary,
       skills,
@@ -145,7 +145,7 @@ const getAllJobs = async (req, res) => {
           },
         },
         {
-          discription: {
+          description: {
             $regex: safeSearch,
             $options: "i",
           },
@@ -389,7 +389,7 @@ const updateJob = async (req, res) => {
     const {
       title,
       company,
-      discription,
+      description,
       location,
       salary,
       skills,
@@ -408,7 +408,7 @@ const updateJob = async (req, res) => {
       company ?? job.company;
 
     job.discription =
-      discription ?? job.discription;
+      description ?? job.description;
 
     job.location =
       location ?? job.location;
