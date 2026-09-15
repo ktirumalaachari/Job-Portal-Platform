@@ -20,7 +20,7 @@ const CandidateProfile = () => {
   // BACKEND URL
   // ========================================
 
-  const BACKEND_URL = "http://localhost:8001";
+  const BACKEND_URL = "https://job-portal-platform-sakq.onrender.com";
 
   // ========================================
   // FETCH CANDIDATE PROFILE
